@@ -3,27 +3,39 @@ import pandas as pd
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 import json
+import os
 
 app = Flask(__name__)
 
 # Load mentors data
 mentors_path = "linkedin_mentors.csv"
-mentors_df = pd.read_csv(mentors_path)
-scraped_mentors_df = pd.read_csv(mentors_path)
-
-mentors_df['source'] = 'LinkedIn'
+scraped_mentors_path = "mentor_scraped_data.csv"
+scraped_mentors_df = pd.read_csv(scraped_mentors_path)
 scraped_mentors_df['source'] = 'Web Scraping'
+scraped_mentors_df['about'] = scraped_mentors_df['Bio_x']
+scraped_mentors_df['name'] = scraped_mentors_df['Name']
 
-
-# Convert embeddings from string back to list
-mentors_df['embedding'] = mentors_df['embedding'].apply(lambda x: json.loads(x))
 scraped_mentors_df['embedding'] = scraped_mentors_df['embedding'].apply(lambda x: json.loads(x))
 
-mentors_df = pd.concat([mentors_df, scraped_mentors_df], ignore_index=True)
 
+if os.path.exists(mentors_path):
+
+    mentors_df = pd.read_csv(mentors_path)
+
+    mentors_df['source'] = 'LinkedIn'
+
+    mentors_df['embedding'] = mentors_df['embedding'].apply(lambda x: json.loads(x))
+
+    mentors_df = pd.concat([mentors_df, scraped_mentors_df], ignore_index=True)
+else:
+    print('[!] LinkedIn data NOT FOUND, we will use scraped data only')
+    mentors_df = scraped_mentors_df
 
 # Load embedding model
 model = SentenceTransformer('all-MiniLM-L6-v2')
+
+
+
 
 def find_best_mentors(query, top_n=5):
     """
@@ -33,8 +45,9 @@ def find_best_mentors(query, top_n=5):
     mentors_df['similarity'] = mentors_df['embedding'].apply(
         lambda x: cosine_similarity(query_embedding, [x])[0][0]
     )
+    #mentors_df['similarity'] +=  0.2* (mentors_df['source'] == 'LinkedIn')
     top_mentors = mentors_df.sort_values(by='similarity', ascending=False).head(top_n)
-    return top_mentors[['name', 'about', 'certifications', 'similarity', 'source']].to_dict(orient='records')
+    return top_mentors[['name', 'about', 'similarity', 'source']].to_dict(orient='records')
 
 @app.route('/')
 def index():
